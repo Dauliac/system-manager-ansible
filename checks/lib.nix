@@ -48,7 +48,7 @@ let
   }) diskRoles;
 
   aggregate = pkgs.symlinkJoin {
-    name = "system-manager-ansible-checks";
+    name = "ansnix-checks";
     paths = builtins.attrValues perRoleChecks;
   };
 in

@@ -1,36 +1,34 @@
-# Example host declaration — mirrors the semantics of the current inline module
-# at `dotfiles/modules/system-manager/debian/bootstrap.yml`.
-#
-# Import into a system-manager or NixOS host config:
+# Example host declaration — mirrors the semantics of the pre-ansnix debian
+# bootstrap. Import into a system-manager or NixOS host config:
 #
 #   { inputs, ... }: {
-#     imports = [ inputs.system-manager-ansible.systemManagerModules.default ];
-#     services.ansible = import ./debian-host.nix { inherit inputs; };
+#     imports = [
+#       inputs.ansnix.systemManagerModules.default
+#       ./debian-host.nix
+#     ];
 #   }
-#
-# …or use the whole file as a module directly if you prefer that pattern.
 {
-  services.ansible = {
+  ansnix = {
     enable = true;
 
     roles = {
       systemd-default-target = {
         priority = 50;
-        target   = "multi-user";
+        target = "multi-user";
       };
 
       apt-repo = {
         priority = 60;
         repos = [{
-          name   = "danklinux";
-          url    = "https://download.opensuse.org/repositories/home:AvengeMedia:danklinux/Debian_13";
+          name = "danklinux";
+          url = "https://download.opensuse.org/repositories/home:AvengeMedia:danklinux/Debian_13";
           keyUrl = "https://download.opensuse.org/repositories/home:AvengeMedia:danklinux/Debian_13/Release.key";
         }];
       };
 
       apt-packages = {
         priority = 100;
-        after    = [ "apt-repo" ];
+        after = [ "apt-repo" ];
         packages = [
           "network-manager"
           "niri"

@@ -7,7 +7,7 @@
 }:
 
 let
-  cfg = config.services.ansible;
+  cfg = config.ansnix;
   roleDefs = libExt.discoverRoles rolesDir;
 
   roleSubmodule = lib.types.submoduleWith {
@@ -37,7 +37,7 @@ let
     else
       libExt.composePlaybook {
         inherit pkgs;
-        name = "ansible";
+        name = "ansnix";
         roles = cfg.roles;
         inherit roleDefs;
         become = false;
@@ -54,7 +54,7 @@ let
         playbookFile = composed.playbookFile;
         extraVarsFile = composed.extraVarsFile;
         rolesPath = composed.rolesPath;
-        name = "ansible-runner";
+        name = "ansnix-runner";
       };
 
   checkService =
@@ -62,15 +62,16 @@ let
       null
     else
       pkgs.writeShellApplication {
-        name = "ansible-check";
+        name = "ansnix-check";
         runtimeInputs = [ pkgs.systemd pkgs.coreutils ];
         text = ''
-          if systemctl --user is-failed --quiet ansible.service; then
-            echo "services.ansible: user ansible.service is in the 'failed' state." >&2
-            echo "  Inspect with: journalctl --user -u ansible -e" >&2
-            case "${cfg.onFailure}" in
+          on_failure=${lib.escapeShellArg cfg.onFailure}
+          if systemctl --user is-failed --quiet ansnix.service; then
+            echo "ansnix: user ansnix.service is in the 'failed' state." >&2
+            echo "  Inspect with: journalctl --user -u ansnix -e" >&2
+            case "$on_failure" in
               fail-activation) exit 1 ;;
-              warn)            echo "  (services.ansible.onFailure = warn — continuing)" >&2 ;;
+              warn)            echo "  (ansnix.onFailure = warn — continuing)" >&2 ;;
               ignore)          : ;;
             esac
           fi
@@ -78,8 +79,8 @@ let
       };
 in
 {
-  options.services.ansible = {
-    enable = lib.mkEnableOption "system-manager-ansible (user-context)";
+  options.ansnix = {
+    enable = lib.mkEnableOption "ansnix (user-context)";
     package = lib.mkPackageOption pkgs "ansible" { };
     roles = lib.mkOption { type = lib.types.attrsOf roleSubmodule; default = { }; };
     vars = lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = { }; };
@@ -87,7 +88,7 @@ in
     runOnActivation = lib.mkOption { type = lib.types.bool; default = false; };
     markerPath = lib.mkOption {
       type = lib.types.str;
-      default = "%S/system-manager-ansible/ansible.done";
+      default = "%S/ansnix/done";
     };
     disableMarker = lib.mkOption { type = lib.types.bool; default = false; };
     onFailure = lib.mkOption {
@@ -101,16 +102,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    systemd.user.services.ansible = lib.recursiveUpdate {
+    systemd.user.services.ansnix = lib.recursiveUpdate {
       Unit = {
-        Description = "system-manager-ansible: composed ansible playbook (user, localhost)";
+        Description = "ansnix: composed ansible playbook (user, localhost)";
       } // lib.optionalAttrs (!cfg.disableMarker) {
         ConditionPathExists = "!${cfg.markerPath}";
       };
       Service = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${runner}/bin/ansible-runner";
+        ExecStart = "${runner}/bin/ansnix-runner";
         ExecStartPost = "${pkgs.bash}/bin/bash -c 'mkdir -p \"$(dirname \"${cfg.markerPath}\")\" && touch \"${cfg.markerPath}\"'";
       };
       Install = lib.optionalAttrs cfg.runOnBoot {
@@ -118,16 +119,16 @@ in
       };
     } cfg.extraSystemdConfig;
 
-    systemd.user.services.ansible-check = lib.mkIf (cfg.onFailure != "ignore") {
+    systemd.user.services.ansnix-check = lib.mkIf (cfg.onFailure != "ignore") {
       Unit = {
-        Description = "system-manager-ansible: post-deploy failure check (user)";
-        After = [ "ansible.service" ];
-        Wants = [ "ansible.service" ];
+        Description = "ansnix: post-deploy failure check (user)";
+        After = [ "ansnix.service" ];
+        Wants = [ "ansnix.service" ];
       };
       Service = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${checkService}/bin/ansible-check";
+        ExecStart = "${checkService}/bin/ansnix-check";
       };
       Install = {
         WantedBy = [ "default.target" ];

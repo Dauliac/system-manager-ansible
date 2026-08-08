@@ -8,7 +8,7 @@
 
 - [ ] 2.1 Document the `roles/<name>/` disk-role layout in `roles/README.md` — `defaults/main.yml`, `tasks/main.yml`, `meta/main.yml`, `meta/nix-options.nix`, `README.md` required; `handlers/`, `templates/`, `files/` optional.
 - [ ] 2.2 Define the `meta/nix-options.nix` schema: `{ options, config ? { }, checkable ? bool }`. No `context` field.
-- [ ] 2.3 Document the inline-role authoring shape (`services.ansible.roles.<name> = { tasks = [ … ]; handlers = [ … ]; };`) in the same `roles/README.md`.
+- [ ] 2.3 Document the inline-role authoring shape (`ansnix.roles.<name> = { tasks = [ … ]; handlers = [ … ]; };`) in the same `roles/README.md`.
 - [ ] 2.4 Author `roles/apt-repo/` — deb/OBS repo declaration extracted from `bootstrap.yml`'s `danklinux-repo` block. `checkable = false`.
 - [ ] 2.5 Author `roles/apt-packages/` — thin wrapper over `ansible.builtin.apt`. `checkable = false`.
 - [ ] 2.6 Author `roles/pam-line/` — idempotent `lineinfile` on `/etc/pam.d/common-*`. `checkable = false`.
@@ -42,29 +42,29 @@
 
 ## 5. System module — `nixosModules.default` / `systemManagerModules.default` (`nix-module-api` capability)
 
-- [ ] 5.1 Implement `modules/system.nix` exposing the option tree at `services.ansible`:
+- [ ] 5.1 Implement `modules/system.nix` exposing the option tree at `ansnix`:
   - `enable`, `package` (`mkPackageOption`), `runOnBoot`, `runOnActivation`, `markerPath`, `disableMarker`, `onFailure`, `extraSystemdConfig`, `vars` (module-level `extraVars`).
   - `roles` (`attrsOf submodule`): each submodule declares the common fields (`enable`, `priority`, `tasks`, `handlers`, `after`, `before`, `requires`, `checkable`) and — if a disk role of that name exists — dynamically merges in that role's `meta/nix-options.nix::options`.
-- [ ] 5.2 Generate exactly one `systemd.services.ansible` unit — oneshot, `ConditionPathExists=!<marker>` when `disableMarker = false`, `After=network-online.target` when `runOnBoot`.
-- [ ] 5.3 Emit `system.activationScripts.ansible-check` running the post-deploy `systemctl is-failed ansible.service` check with behavior driven by `onFailure`.
-- [ ] 5.4 Assert at eval: for every declared role, at least one of `roles/<name>/` on disk OR `.tasks` non-empty must be true. Otherwise print `services.ansible.roles.<name>: neither a disk role at roles/<name>/ nor inline tasks — nothing to run`.
+- [ ] 5.2 Generate exactly one `systemd.ansnix` unit — oneshot, `ConditionPathExists=!<marker>` when `disableMarker = false`, `After=network-online.target` when `runOnBoot`.
+- [ ] 5.3 Emit `system.activationScripts.ansible-check` running the post-deploy `systemctl is-failed ansnix.service` check with behavior driven by `onFailure`.
+- [ ] 5.4 Assert at eval: for every declared role, at least one of `roles/<name>/` on disk OR `.tasks` non-empty must be true. Otherwise print `ansnix.roles.<name>: neither a disk role at roles/<name>/ nor inline tasks — nothing to run`.
 - [ ] 5.5 Export the module as both `nixosModules.default` and `systemManagerModules.default` (same file, aliased in `flake.nix`).
 
 ## 6. Home-manager module — `homeManagerModules.default` (`nix-module-api` capability)
 
-- [ ] 6.1 Implement `modules/home-manager.nix` exposing the exact same `services.ansible` option tree.
-- [ ] 6.2 Generate one `systemd.user.services.ansible` unit — oneshot, `become = false` passed to composition.
-- [ ] 6.3 Emit `home.activation.ansible-check` using `systemctl --user is-failed ansible.service`.
-- [ ] 6.4 Default `markerPath` to `$XDG_STATE_HOME/system-manager-ansible/ansible.done`.
+- [ ] 6.1 Implement `modules/home-manager.nix` exposing the exact same `ansnix` option tree.
+- [ ] 6.2 Generate one `systemd.user.ansnix` unit — oneshot, `become = false` passed to composition.
+- [ ] 6.3 Emit `home.activation.ansible-check` using `systemctl --user is-failed ansnix.service`.
+- [ ] 6.4 Default `markerPath` to `$XDG_STATE_HOME/ansnix/ansible.done`.
 
 ## 7. Worked example — debian bootstrap
 
-- [ ] 7.1 Author `examples/debian-host.nix` declaring `services.ansible = { enable = true; roles = { apt-repo = { … }; apt-packages = { after = [ "apt-repo" ]; … }; pam-line = { requires = [ "apt-packages" ]; … }; user-in-group = { … }; systemd-default-target = { priority = 50; … }; }; };` matching `dotfiles/modules/system-manager/debian/bootstrap.yml` semantics.
+- [ ] 7.1 Author `examples/debian-host.nix` declaring `ansnix = { enable = true; roles = { apt-repo = { … }; apt-packages = { after = [ "apt-repo" ]; … }; pam-line = { requires = [ "apt-packages" ]; … }; user-in-group = { … }; systemd-default-target = { priority = 50; … }; }; };` matching `dotfiles/modules/system-manager/debian/bootstrap.yml` semantics.
 - [ ] 7.2 Verify the composed playbook renders semantics equivalent to the original (task list, PAM lines, docker user, apt calls batched).
 
 ## 8. Documentation
 
-- [ ] 8.1 Root `README.md` — one-page quickstart: "declare `services.ansible`, get a systemd unit, fail loud on activation".
+- [ ] 8.1 Root `README.md` — one-page quickstart: "declare `ansnix`, get a systemd unit, fail loud on activation".
 - [ ] 8.2 `roles/README.md` — role authoring guide (disk-role schema, inline-role shape, testing, publishing a new role).
 - [ ] 8.3 `docs/nix-api.md` — reference for `lib.*` and the module option tree, generated from doc-comments where possible.
 - [ ] 8.4 `docs/organization.md` — the three organizational approaches (primitive+intent-files, inline intent-roles, hybrid feature modules) with the "start with B, graduate to C if needed" recommendation. Prevents future contributors from re-litigating the debate.
@@ -72,7 +72,7 @@
 
 ## 9. Follow-ups (deferred; tracked as future changes)
 
-- [ ] 9.1 `dotfiles` migration: replace `modules/system-manager/debian/` inline module with an import of `inputs.system-manager-ansible.systemManagerModules.default` + a `services.ansible = { … };` declaration. Delete the inline module once parity verified.
+- [ ] 9.1 `dotfiles` migration: replace `modules/system-manager/debian/` inline module with an import of `inputs.ansnix.systemManagerModules.default` + a `ansnix = { … };` declaration. Delete the inline module once parity verified.
 - [ ] 9.2 Per-role `async` opt-in for tasks whose latency justifies it.
 - [ ] 9.3 Cross-role handler validation at build time (currently only validated at ansible runtime).
 - [ ] 9.4 `wants` edge (soft activation) — add if a use case appears.

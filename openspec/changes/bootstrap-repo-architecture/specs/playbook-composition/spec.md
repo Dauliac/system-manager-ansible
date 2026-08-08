@@ -1,6 +1,6 @@
 ## Purpose
 
-Defines the Nix library API used by the `services.ansible` module to compose an attrset of role invocations (disk-backed, inline, or hybrid) into one rendered ansible playbook — resolving dependency ordering via a DAG, generating on-the-fly role directories for inline roles, rendering per-role vars inline in the `roles:`/`tasks:` block, and building the runner derivation that pins the caller-configured ansible package.
+Defines the Nix library API used by the `ansnix` module to compose an attrset of role invocations (disk-backed, inline, or hybrid) into one rendered ansible playbook — resolving dependency ordering via a DAG, generating on-the-fly role directories for inline roles, rendering per-role vars inline in the `roles:`/`tasks:` block, and building the runner derivation that pins the caller-configured ansible package.
 
 ## ADDED Requirements
 
@@ -8,7 +8,7 @@ Defines the Nix library API used by the `services.ansible` module to compose an 
 
 `lib.composePlaybook { name, package, roles, become ? true, extraVars ? { } }` SHALL return an attrset `{ playbookFile, extraVarsFile, orderedRoles, rolesPath }` where:
 
-- `roles` is the attrset from `services.ansible.roles.*` after module merging.
+- `roles` is the attrset from `ansnix.roles.*` after module merging.
 - `playbookFile` is a `/nix/store` path to a `.yml` file declaring `hosts: localhost`, `connection: local`, `become: <become>`, `gather_facts: yes`, and a `tasks:` block with one `import_role` per composed entry.
 - `extraVarsFile` is a `/nix/store` path to a JSON file with the module-level `extraVars` attrs, or `null` if `extraVars` is empty.
 - `orderedRoles` is the ordered list of role names in the composed playbook, resolved via the DAG algorithm below.
@@ -57,7 +57,7 @@ Defines the Nix library API used by the `services.ansible` module to compose an 
 
 #### Scenario: Cycle detection
 - **WHEN** `roles.a.requires = [ "b" ]` and `roles.b.requires = [ "a" ]`
-- **THEN** eval fails with `dependency cycle detected in services.ansible.roles: a → b → a`
+- **THEN** eval fails with `dependency cycle detected in ansnix.roles: a → b → a`
 
 ### Requirement: Inline and hybrid roles produce generated role directories
 
@@ -94,7 +94,7 @@ For each composed entry, `lib.composePlaybook` SHALL render the caller-supplied 
 `lib.mkPlaybookRunner { package, playbookFile, extraVarsFile ? null, rolesPath }` SHALL return a derivation whose output is a shell script that invokes `${package}/bin/ansible-playbook --connection=local --inventory=localhost, --roles-path=${rolesPath} ${playbookFile}`, and appends `--extra-vars @${extraVarsFile}` when `extraVarsFile != null`. `PATH` SHALL be composed of `${package}`, `pkgs.python3`, `pkgs.gnupg`, `pkgs.gnutar`, `pkgs.gzip`, `pkgs.coreutils`, then `/usr/sbin:/usr/bin:/sbin:/bin` appended for host tools like `dpkg` and `apt`.
 
 #### Scenario: Overriding the ansible package
-- **WHEN** a caller sets `services.ansible.package = pkgs.ansible-core`
+- **WHEN** a caller sets `ansnix.package = pkgs.ansible-core`
 - **THEN** the generated runner's `ansible-playbook` resolves to `${pkgs.ansible-core}/bin/ansible-playbook`
 
 ### Requirement: Composed playbooks are deterministic

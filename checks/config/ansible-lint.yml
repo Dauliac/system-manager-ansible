@@ -1,5 +1,5 @@
 ---
-# ansible-lint config for system-manager-ansible role library.
+# ansible-lint config for ansnix role library.
 # See https://ansible-lint.readthedocs.io/configuring/
 profile: null
 

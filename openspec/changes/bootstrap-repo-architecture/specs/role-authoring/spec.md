@@ -1,6 +1,6 @@
 ## Purpose
 
-Defines the two authoring shapes for a role — a **disk-backed** role living under `roles/<name>/` with a typed Nix schema, or an **inline** role declared entirely in Nix via `services.ansible.roles.<name>.tasks` — plus the shared metadata rules that make both consumable by the same composition layer.
+Defines the two authoring shapes for a role — a **disk-backed** role living under `roles/<name>/` with a typed Nix schema, or an **inline** role declared entirely in Nix via `ansnix.roles.<name>.tasks` — plus the shared metadata rules that make both consumable by the same composition layer.
 
 ## ADDED Requirements
 
@@ -26,12 +26,12 @@ Every disk role SHALL ship a `meta/nix-options.nix` that evaluates to an attrset
 - The role SHALL NOT declare any `context` field or equivalent runtime-target metadata. Where the role runs (system vs user) is determined by which module imports it.
 
 #### Scenario: Typed attrs are validated at eval time
-- **WHEN** a caller writes `services.ansible.roles.apt-repo.repos = "not-a-list"` and the disk role's schema declares `repos` as `listOf submodule`
+- **WHEN** a caller writes `ansnix.roles.apt-repo.repos = "not-a-list"` and the disk role's schema declares `repos` as `listOf submodule`
 - **THEN** Nix eval fails with a type error citing the role name and the option path
 
-### Requirement: Inline roles are authored via `services.ansible.roles.<name>.tasks`
+### Requirement: Inline roles are authored via `ansnix.roles.<name>.tasks`
 
-An inline role SHALL exist whenever a caller sets `services.ansible.roles.<name>.tasks` to a non-empty list AND no `roles/<name>/` exists on disk. Inline roles:
+An inline role SHALL exist whenever a caller sets `ansnix.roles.<name>.tasks` to a non-empty list AND no `roles/<name>/` exists on disk. Inline roles:
 
 - SHALL declare their tasks as a list of Nix attrsets that render 1:1 to ansible task YAML.
 - MAY declare `handlers` as a list of ansible handler attrsets.
@@ -39,24 +39,24 @@ An inline role SHALL exist whenever a caller sets `services.ansible.roles.<name>
 - SHALL be given a generated role directory at `/nix/store/<hash>-inline-<name>/` by `lib.generateInlineRole` at nix-build time, containing `tasks/main.yml`, `handlers/main.yml` (if any), and `meta/main.yml`.
 
 #### Scenario: A caller declares an inline role
-- **WHEN** a caller writes `services.ansible.roles.tty-autologin = { tasks = [ { name = "..."; "ansible.builtin.copy" = { ... }; } ]; };` and no `roles/tty-autologin/` directory exists
+- **WHEN** a caller writes `ansnix.roles.tty-autologin = { tasks = [ { name = "..."; "ansible.builtin.copy" = { ... }; } ]; };` and no `roles/tty-autologin/` directory exists
 - **THEN** the composition step generates `/nix/store/<hash>-inline-tty-autologin/tasks/main.yml` and the playbook `import_role`s it by name
 
 #### Scenario: An empty entry is rejected
-- **WHEN** a caller writes `services.ansible.roles.foo = { };` and no `roles/foo/` disk directory exists
-- **THEN** Nix eval fails with `services.ansible.roles.foo: neither a disk role at roles/foo/ nor inline tasks — nothing to run`
+- **WHEN** a caller writes `ansnix.roles.foo = { };` and no `roles/foo/` disk directory exists
+- **THEN** Nix eval fails with `ansnix.roles.foo: neither a disk role at roles/foo/ nor inline tasks — nothing to run`
 
 ### Requirement: Hybrid roles combine disk tasks with inline extras
 
-If `roles/<name>/` exists on disk AND `services.ansible.roles.<name>.tasks` is non-empty, the composer SHALL treat the entry as hybrid: the disk role runs first, then the inline tasks execute in the same invocation (as a task block that follows the disk role's `import_role`). Inline `handlers` on a hybrid entry SHALL be additive to the disk role's handlers.
+If `roles/<name>/` exists on disk AND `ansnix.roles.<name>.tasks` is non-empty, the composer SHALL treat the entry as hybrid: the disk role runs first, then the inline tasks execute in the same invocation (as a task block that follows the disk role's `import_role`). Inline `handlers` on a hybrid entry SHALL be additive to the disk role's handlers.
 
 #### Scenario: Hybrid role composes both
-- **WHEN** `roles/apt-repo/` exists and a caller writes `services.ansible.roles.apt-repo = { repos = [ ... ]; tasks = [ { name = "extra fixup"; ... } ]; };`
+- **WHEN** `roles/apt-repo/` exists and a caller writes `ansnix.roles.apt-repo = { repos = [ ... ]; tasks = [ { name = "extra fixup"; ... } ]; };`
 - **THEN** the rendered playbook `import_role`s `apt-repo` first, then runs the inline `extra fixup` task
 
 ### Requirement: Every role invocation carries the same common fields
 
-Regardless of whether a role is disk-backed, inline, or hybrid, `services.ansible.roles.<name>` SHALL expose these common fields:
+Regardless of whether a role is disk-backed, inline, or hybrid, `ansnix.roles.<name>` SHALL expose these common fields:
 
 - `enable` (`bool`, default `true`) — inclusion toggle.
 - `priority` (`int`, default `100`) — coarse ordering.
@@ -72,10 +72,10 @@ If a disk role of the same name exists, its `meta/nix-options.nix::options` SHAL
 
 ### Requirement: Ansible-native `meta/main.yml::dependencies` is not consumed by the composer
 
-A disk role MAY declare `dependencies` in its `meta/main.yml` for standalone ansible use (running the role outside our composition layer). The composer SHALL ignore that field entirely. All dependency information consumed by the composer SHALL come from `services.ansible.roles.<name>.{after,before,requires}` at the call site.
+A disk role MAY declare `dependencies` in its `meta/main.yml` for standalone ansible use (running the role outside our composition layer). The composer SHALL ignore that field entirely. All dependency information consumed by the composer SHALL come from `ansnix.roles.<name>.{after,before,requires}` at the call site.
 
 #### Scenario: Disk role dependency ignored by composer
-- **GIVEN** `roles/foo/meta/main.yml` declares `dependencies: [{ role: bar }]` and `bar` is NOT declared under `services.ansible.roles`
+- **GIVEN** `roles/foo/meta/main.yml` declares `dependencies: [{ role: bar }]` and `bar` is NOT declared under `ansnix.roles`
 - **WHEN** the composer runs
 - **THEN** `bar` is NOT automatically added to the composition, and no assertion fires (composer never inspected `meta/main.yml::dependencies`)
 

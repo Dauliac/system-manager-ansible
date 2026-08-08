@@ -7,7 +7,7 @@ Ansible in this repo can be organized three ways. Pick based on scale and reuse 
 Roles ARE the intent. All tasks for a feature live in one role.
 
 ```nix
-services.ansible.roles.setup-niri = {
+ansnix.roles.setup-niri = {
   priority = 100;
   tasks = [
     { name = "keyring dir"; "ansible.builtin.file" = { path = "/etc/apt/keyrings"; state = "directory"; }; }
@@ -19,7 +19,7 @@ services.ansible.roles.setup-niri = {
 ```
 
 - ✅ Reads like documentation
-- ✅ `journalctl -u ansible` shows intent names
+- ✅ `journalctl -u ansnix` shows intent names
 - ❌ Fragments apt calls (3 separate installs instead of one batch)
 - ❌ No reuse across hosts
 
@@ -30,14 +30,14 @@ Roles are resource types (`apt-repo`, `apt-packages`, `pam-line`). Intent lives 
 ```nix
 # modules/features/niri.nix
 {
-  services.ansible.roles.apt-repo.repos = [{ name = "danklinux"; url = "…"; keyUrl = "…"; }];
-  services.ansible.roles.apt-packages.packages = [ "niri" "xwayland-satellite" ];
-  services.ansible.roles.apt-packages.after = [ "apt-repo" ];
+  ansnix.roles.apt-repo.repos = [{ name = "danklinux"; url = "…"; keyUrl = "…"; }];
+  ansnix.roles.apt-packages.packages = [ "niri" "xwayland-satellite" ];
+  ansnix.roles.apt-packages.after = [ "apt-repo" ];
 }
 
 # modules/features/network-manager.nix
 {
-  services.ansible.roles.apt-packages.packages = [ "network-manager" ];  # merges into list
+  ansnix.roles.apt-packages.packages = [ "network-manager" ];  # merges into list
 }
 ```
 
@@ -55,8 +55,8 @@ Highest abstraction. Callers write `features.niri.enable = true;` and a helper m
 { config, lib, ... }: {
   options.ansibleFeatures.niri.enable = lib.mkEnableOption "niri";
   config = lib.mkIf config.ansibleFeatures.niri.enable {
-    services.ansible.roles.apt-repo.repos = [ … ];
-    services.ansible.roles.apt-packages.packages = [ "niri" "xwayland-satellite" ];
+    ansnix.roles.apt-repo.repos = [ … ];
+    ansnix.roles.apt-packages.packages = [ "niri" "xwayland-satellite" ];
   };
 }
 ```

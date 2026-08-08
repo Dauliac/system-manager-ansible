@@ -7,7 +7,7 @@
 }:
 
 let
-  cfg = config.services.ansible;
+  cfg = config.ansnix;
   roleDefs = libExt.discoverRoles rolesDir;
 
   roleSubmodule = lib.types.submoduleWith {
@@ -69,7 +69,7 @@ let
     else
       libExt.composePlaybook {
         inherit pkgs;
-        name = "ansible";
+        name = "ansnix";
         roles = cfg.roles;
         inherit roleDefs;
         become = true;
@@ -86,28 +86,24 @@ let
         playbookFile = composed.playbookFile;
         extraVarsFile = composed.extraVarsFile;
         rolesPath = composed.rolesPath;
-        name = "ansible-runner";
+        name = "ansnix-runner";
       };
 
-  # Check helper — run after ansible.service and enforce onFailure semantics.
-  # Runs on every activation via oneshot; does NOT block activation itself
-  # (system-manager doesn't expose an activation hook that can fail switch).
-  # A crashed ansible.service will show in `systemctl status ansible` and
-  # cascade via ansible-check.service's own failed state.
   checkService =
     if runner == null then
       null
     else
       pkgs.writeShellApplication {
-        name = "ansible-check";
+        name = "ansnix-check";
         runtimeInputs = [ pkgs.systemd pkgs.coreutils ];
         text = ''
-          if systemctl is-failed --quiet ansible.service; then
-            echo "services.ansible: ansible.service is in the 'failed' state." >&2
-            echo "  Inspect with: journalctl -u ansible -e" >&2
-            case "${cfg.onFailure}" in
+          on_failure=${lib.escapeShellArg cfg.onFailure}
+          if systemctl is-failed --quiet ansnix.service; then
+            echo "ansnix: ansnix.service is in the 'failed' state." >&2
+            echo "  Inspect with: journalctl -u ansnix -e" >&2
+            case "$on_failure" in
               fail-activation) exit 1 ;;
-              warn)            echo "  (services.ansible.onFailure = warn — continuing)" >&2 ;;
+              warn)            echo "  (ansnix.onFailure = warn — continuing)" >&2 ;;
               ignore)          : ;;
             esac
           fi
@@ -115,8 +111,8 @@ let
       };
 in
 {
-  options.services.ansible = {
-    enable = lib.mkEnableOption "system-manager-ansible declarative bootstrap";
+  options.ansnix = {
+    enable = lib.mkEnableOption "ansnix — Nix-native ansible bootstrap for localhost";
 
     package = lib.mkPackageOption pkgs "ansible" { };
 
@@ -146,12 +142,12 @@ in
     runOnActivation = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Reserved for a future release — currently a no-op on system-manager.";
+      description = "Reserved — currently a no-op on system-manager.";
     };
 
     markerPath = lib.mkOption {
       type = lib.types.str;
-      default = "/var/lib/system-manager-ansible/ansible.done";
+      default = "/var/lib/ansnix/done";
       description = "systemd ConditionPathExists=! marker.";
     };
 
@@ -165,25 +161,24 @@ in
       type = lib.types.enum [ "fail-activation" "warn" "ignore" ];
       default = "fail-activation";
       description = ''
-        Behaviour of the ancillary ansible-check.service when ansible.service is
-        in the 'failed' state. Note: system-manager doesn't expose a way to fail
-        the `switch` command from an activation script, so 'fail-activation'
-        currently means "ansible-check.service exits non-zero" — the failure is
-        visible via `systemctl status ansible-check` but does NOT propagate to
-        the deployer's shell.
+        Behaviour of the companion ansnix-check.service when ansnix.service is
+        in the 'failed' state. Note: system-manager doesn't expose an activation
+        hook that can fail `switch`, so 'fail-activation' currently means
+        "ansnix-check.service exits non-zero" — visible via `systemctl status
+        ansnix-check` but does NOT propagate to the deployer's shell.
       '';
     };
 
     extraSystemdConfig = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
       default = { };
-      description = "Merged verbatim into systemd.services.ansible.";
+      description = "Merged verbatim into systemd.services.ansnix.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    systemd.services.ansible = lib.recursiveUpdate {
-      description = "system-manager-ansible: composed ansible playbook (localhost)";
+    systemd.services.ansnix = lib.recursiveUpdate {
+      description = "ansnix: composed ansible playbook (localhost, oneshot)";
       wantedBy = lib.optional cfg.runOnBoot "multi-user.target";
       after = lib.optionals cfg.runOnBoot [ "network-online.target" ];
       wants = lib.optionals cfg.runOnBoot [ "network-online.target" ];
@@ -193,21 +188,20 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${runner}/bin/ansible-runner";
+        ExecStart = "${runner}/bin/ansnix-runner";
         ExecStartPost = "${pkgs.coreutils}/bin/mkdir -p ${dirOf cfg.markerPath} && ${pkgs.coreutils}/bin/touch ${cfg.markerPath}";
       };
     } cfg.extraSystemdConfig;
 
-    # Post-deploy check unit — runs after ansible.service, mirrors its failure.
-    systemd.services.ansible-check = lib.mkIf (cfg.onFailure != "ignore") {
-      description = "system-manager-ansible: post-deploy failure check";
-      after = [ "ansible.service" ];
-      wants = [ "ansible.service" ];
+    systemd.services.ansnix-check = lib.mkIf (cfg.onFailure != "ignore") {
+      description = "ansnix: post-deploy failure check";
+      after = [ "ansnix.service" ];
+      wants = [ "ansnix.service" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${checkService}/bin/ansible-check";
+        ExecStart = "${checkService}/bin/ansnix-check";
       };
     };
   };

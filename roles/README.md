@@ -1,6 +1,6 @@
 # Role authoring guide
 
-This directory contains the canonical library of **disk-backed** Ansible roles consumed by `services.ansible`. Each subdirectory is one role.
+This directory contains the canonical library of **disk-backed** Ansible roles consumed by `ansnix`. Each subdirectory is one role.
 
 ## Disk-role layout
 
@@ -41,7 +41,7 @@ Task files reference the options as normal ansible vars: `{{ myOption }}`.
 You do NOT need to author a disk role to add tasks. If you have a small one-off, use inline authoring at the caller site:
 
 ```nix
-services.ansible.roles.tty-autologin = {
+ansnix.roles.tty-autologin = {
   priority = 200;
   tasks = [
     { name = "install override dir";

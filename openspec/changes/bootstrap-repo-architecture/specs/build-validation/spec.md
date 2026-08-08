@@ -29,7 +29,7 @@ For every inline role produced by `lib.generateInlineRole` in the composed confi
 Failures in a generated-inline role's check SHALL name the role and note that the source is inline Nix in the caller's config (so contributors know where to look — not in `roles/`).
 
 #### Scenario: Malformed inline task fails the check
-- **WHEN** a caller writes `services.ansible.roles.foo.tasks = [ { name = "bad"; "ansible.builtin.file" = "not-a-dict"; } ];`
+- **WHEN** a caller writes `ansnix.roles.foo.tasks = [ { name = "bad"; "ansible.builtin.file" = "not-a-dict"; } ];`
 - **THEN** the generated `check-inline-role-foo` derivation fails, and the failure message identifies the inline role source
 
 ### Requirement: Every composed playbook has a syntax-check derivation
@@ -44,7 +44,7 @@ For every playbook composed via `lib.composePlaybook`, the flake SHALL expose a 
 
 A composed playbook SHALL additionally run `ansible-playbook --check --diff --connection=local --inventory=localhost, <playbookFile>` in its check derivation ONLY IF **every** included role (disk or inline) is `checkable = true`. If any included role is not `checkable`, the `--check` step is skipped and only `--syntax-check` runs.
 
-For disk roles, `checkable` is read from `meta/nix-options.nix::checkable`. For inline roles, `checkable` is read from `services.ansible.roles.<name>.checkable`.
+For disk roles, `checkable` is read from `meta/nix-options.nix::checkable`. For inline roles, `checkable` is read from `ansnix.roles.<name>.checkable`.
 
 #### Scenario: A playbook with one non-checkable role skips `--check`
 - **WHEN** a playbook composes `roles/apt-packages` (`checkable = false`) and `roles/systemd-default-target` (`checkable = true`)

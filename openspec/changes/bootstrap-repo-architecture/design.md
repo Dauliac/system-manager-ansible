@@ -11,7 +11,7 @@ Constraints we accept up front:
 
 - **Localhost-only.** No inventory management, no SSH, no become-over-SSH. `--connection=local --inventory=localhost,` is the *only* execution mode.
 - **Nix is the authoring interface for playbook composition.** YAML playbooks are a *render target*, never hand-written by consumers. Disk roles remain hand-written YAML (that's where ansible tooling lives); inline roles are authored in Nix and get on-the-fly YAML generated at build time.
-- **One `services.ansible` module invocation = one playbook = one systemd unit** (see D1).
+- **One `ansnix` module invocation = one playbook = one systemd unit** (see D1).
 - **The module surface reads like a real NixOS service.** `enable`, `package`, `roles` (attrset). No invented terminology.
 - **Both `become: yes` (system) and `become: no` (user) contexts are first-class.**
 
@@ -36,24 +36,24 @@ Constraints we accept up front:
 
 ## Decisions
 
-### D1. One `services.ansible` invocation = one playbook = one systemd unit
+### D1. One `ansnix` invocation = one playbook = one systemd unit
 
-**Decision.** All declared roles compose into a single rendered playbook, run by a single systemd unit named `ansible.service` (system) or `ansible.service` under `--user` (home-manager).
+**Decision.** All declared roles compose into a single rendered playbook, run by a single systemd unit named `ansnix.service` (system) or `ansnix.service` under `--user` (home-manager).
 
 **Why.**
 
 - **Bootstrap workloads don't benefit from multi-unit split.** Task-level batching (`apt: name: [a,b,c]` is one apt call) provides the parallelism that matters. Multi-unit orchestration would only serialize via `After=` anyway.
 - **One unit is easier to reason about.** One journal, one status, one marker, one activation check.
-- **`systemctl status ansible` / `journalctl -u ansible` reads like any other service.**
+- **`systemctl status ansible` / `journalctl -u ansnix` reads like any other service.**
 
 **Alternatives considered.**
 
 - *`playbooks.<name>` attrset (early design).* Rejected: layer of naming the caller doesn't want; isolation benefit illusory at bootstrap scale.
 - *Opt-in per-role `async` for real concurrency.* Deferred — not needed at current scale.
 
-### D2. Unified `services.ansible.roles.<name>` namespace — disk, inline, or hybrid
+### D2. Unified `ansnix.roles.<name>` namespace — disk, inline, or hybrid
 
-**Decision.** `services.ansible.roles.<name>` is a submodule with:
+**Decision.** `ansnix.roles.<name>` is a submodule with:
 
 - **Common fields on every role invocation:**
   - `enable` (`bool`, default `true`) — opt-out toggle.
@@ -61,33 +61,33 @@ Constraints we accept up front:
   - `tasks` (`listOf attrs`, default `[ ]`) — inline task definitions.
   - `handlers` (`listOf attrs`, default `[ ]`) — inline handler definitions.
   - `after` / `before` / `requires` — dependency edges (see D11).
-- **Role-specific fields:** if a disk role `roles/<name>/` exists, its `meta/nix-options.nix::options` are merged into the submodule so caller can write `services.ansible.roles.apt-repo.repos = [...]`.
+- **Role-specific fields:** if a disk role `roles/<name>/` exists, its `meta/nix-options.nix::options` are merged into the submodule so caller can write `ansnix.roles.apt-repo.repos = [...]`.
 
 **Composer resolution per entry:**
 
 1. **Disk-backed** (`roles/<name>/` exists, `.tasks` empty) — invoke the disk role with the caller's schema attrs as inline `vars:`.
 2. **Inline-only** (no disk role, `.tasks` non-empty) — generate `/nix/store/<hash>-inline-<name>/tasks/main.yml` from `.tasks`; treat as a role.
 3. **Hybrid** (disk role exists, `.tasks` also non-empty) — invoke the disk role, then append the inline tasks as extra tasks within the same invocation (or emit them as a second task-block right after).
-4. **Neither** (no disk role, `.tasks` empty) — assertion failure at eval with a clear message. `services.ansible.roles.<name> = { };` with nothing to run is meaningless.
+4. **Neither** (no disk role, `.tasks` empty) — assertion failure at eval with a clear message. `ansnix.roles.<name> = { };` with nothing to run is meaningless.
 
 **Why.** Consumers get one namespace for both "reusable, typed, versioned" (disk roles) and "one-off, right-sized" (inline roles). The nix-module extension pattern applies uniformly.
 
 **Alternatives considered.**
 
-- *Separate `services.ansible.roles` (disk) and `services.ansible.inlineRoles` (inline).* Cleaner semantic split but bureaucratic. Two ways to do the same thing.
+- *Separate `ansnix.roles` (disk) and `ansnix.inlineRoles` (inline).* Cleaner semantic split but bureaucratic. Two ways to do the same thing.
 - *Only disk roles.* Rejected: forces a directory for every 3-task feature; too heavy.
 - *Only inline roles.* Rejected: loses `ansible-lint` fidelity on source, loses reuse across hosts.
 
-### D3. Per-role attrs hoisted directly under `services.ansible.roles.<name>`
+### D3. Per-role attrs hoisted directly under `ansnix.roles.<name>`
 
 **Decision.** No intermediate `vars` bucket. Callers write:
 
 ```nix
-services.ansible.roles.apt-repo.repos    = [ ... ];
-services.ansible.roles.apt-packages.packages = [ "niri" ];
+ansnix.roles.apt-repo.repos    = [ ... ];
+ansnix.roles.apt-packages.packages = [ "niri" ];
 ```
 
-Not `services.ansible.vars.apt-repo.repos = [...]`.
+Not `ansnix.vars.apt-repo.repos = [...]`.
 
 **Why.** Matches every stock NixOS service (`services.nginx.virtualHosts.<name>`, `services.postgresql.settings.<name>`). Also makes distributed extension trivial — any nix file can extend `roles.<name>.<opt>` and lists merge (concat) via module semantics.
 
@@ -108,7 +108,7 @@ Not `services.ansible.vars.apt-repo.repos = [...]`.
 4. Topological sort with `priority` (then name) as the deterministic tie-breaker.
 5. Cycle detection: fail eval with the printed cycle path.
 
-**Why.** No single file owns "the order". A new nix file can declare `services.ansible.roles.foo = { priority = 75; after = [ "apt-repo" ]; ... };` without editing anyone else's config. Mirrors systemd's `Before=`/`After=`/`Requires=`.
+**Why.** No single file owns "the order". A new nix file can declare `ansnix.roles.foo = { priority = 75; after = [ "apt-repo" ]; ... };` without editing anyone else's config. Mirrors systemd's `Before=`/`After=`/`Requires=`.
 
 **Alternatives considered.**
 
@@ -139,7 +139,7 @@ tasks:
 - *`--extra-vars @/nix/store/<hash>-vars.json` with per-role namespacing* (`{ "apt-repo": { "repos": [...] } }`). Rejected: forces role authors to write `{{ apt_repo.repos }}` (or worse with hyphens) — leaks the composition model into every role's tasks.
 - *`vars_files:` per role.* Rejected: proliferates store paths and adds an implicit file-load ordering concern.
 
-**Global vars escape hatch.** `services.ansible.vars = { <key> = <value>; ... };` (attrset) still writes an `--extra-vars @<json>` for module-level vars that apply across all roles. Small, opt-in, non-conflicting.
+**Global vars escape hatch.** `ansnix.vars = { <key> = <value>; ... };` (attrset) still writes an `--extra-vars @<json>` for module-level vars that apply across all roles. Small, opt-in, non-conflicting.
 
 ### D6. Build-time validation is a Nix derivation; `--check` is opt-in per role
 
@@ -156,7 +156,7 @@ All four aggregate under `checks.<system>.default`, gated by `nix flake check`.
 
 ### D7. Post-deploy hook = activation-time systemctl introspection
 
-**Decision.** Both modules install an activation script that runs after the systemd unit is (re)generated and (if `runOnActivation = true`) started synchronously. The script calls `systemctl [--user] is-failed ansible.service`; behaviour driven by `onFailure = "fail-activation" | "warn" | "ignore"`.
+**Decision.** Both modules install an activation script that runs after the systemd unit is (re)generated and (if `runOnActivation = true`) started synchronously. The script calls `systemctl [--user] is-failed ansnix.service`; behaviour driven by `onFailure = "fail-activation" | "warn" | "ignore"`.
 
 **Why.** `system-manager switch` and `home-manager switch` propagate the exit code of their activation scripts.
 
@@ -169,11 +169,11 @@ modules/system.nix        # nixosModules.default === systemManagerModules.defaul
 modules/home-manager.nix  # homeManagerModules.default
 ```
 
-Both expose the exact same option tree under `services.ansible`. They differ only in systemd namespace (`systemd.services.ansible` vs `systemd.user.services.ansible`), the `become` flag passed to composition, the default marker path, and which systemctl invocation the activation script uses.
+Both expose the exact same option tree under `ansnix`. They differ only in systemd namespace (`systemd.ansnix` vs `systemd.user.ansnix`), the `become` flag passed to composition, the default marker path, and which systemctl invocation the activation script uses.
 
 The `nixosModules.default` and `systemManagerModules.default` flake outputs point to the **same file** — they are literally aliases.
 
-### D9. Ansible toolchain is caller-configurable via `services.ansible.package`
+### D9. Ansible toolchain is caller-configurable via `ansnix.package`
 
 **Decision.** `package = lib.mkPackageOption pkgs "ansible" { }`. The runner uses `${cfg.package}/bin/ansible-playbook`; `PATH` carries `pkgs.python3`, `pkgs.gnupg`, `pkgs.gnutar`, `pkgs.gzip`, `pkgs.coreutils`, plus `/usr/sbin:/usr/bin:/sbin:/bin` for host tools.
 
@@ -181,7 +181,7 @@ The `nixosModules.default` and `systemManagerModules.default` flake outputs poin
 
 ### D10. Marker files are per-module-invocation and configurable
 
-**Decision.** Default `/var/lib/system-manager-ansible/ansible.done` (system) or `$XDG_STATE_HOME/system-manager-ansible/ansible.done` (user). Overridable via `services.ansible.markerPath`. `disableMarker = true` forces re-run on every trigger.
+**Decision.** Default `/var/lib/ansnix/ansible.done` (system) or `$XDG_STATE_HOME/ansnix/ansible.done` (user). Overridable via `ansnix.markerPath`. `disableMarker = true` forces re-run on every trigger.
 
 ### D11. Role deps mirror systemd — `after`, `before`, `requires`
 
@@ -200,7 +200,7 @@ Cycle detection: eval fails with the printed cycle path (`A → B → C → A`).
 
 ### D12. Inline roles generate role directories at nix build time
 
-**Decision.** When `services.ansible.roles.<name>.tasks` is non-empty and no `roles/<name>/` exists on disk, `lib.generateInlineRole` produces a derivation at `/nix/store/<hash>-inline-<name>/` with:
+**Decision.** When `ansnix.roles.<name>.tasks` is non-empty and no `roles/<name>/` exists on disk, `lib.generateInlineRole` produces a derivation at `/nix/store/<hash>-inline-<name>/` with:
 
 ```
 /nix/store/<hash>-inline-<name>/

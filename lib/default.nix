@@ -277,7 +277,7 @@ let
       playbookFile,
       extraVarsFile ? null,
       rolesPath,
-      name ? "ansible-runner",
+      name ? "ansnix-runner",
     }:
     let
       extraVarsArg = if extraVarsFile != null then "--extra-vars @${extraVarsFile}" else "";
