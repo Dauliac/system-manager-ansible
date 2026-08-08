@@ -57,20 +57,32 @@ let
         name = "ansible-runner";
       };
 
-  xdgStateHome = "\${XDG_STATE_HOME:-$HOME/.local/state}";
+  checkService =
+    if runner == null then
+      null
+    else
+      pkgs.writeShellApplication {
+        name = "ansible-check";
+        runtimeInputs = [ pkgs.systemd pkgs.coreutils ];
+        text = ''
+          if systemctl --user is-failed --quiet ansible.service; then
+            echo "services.ansible: user ansible.service is in the 'failed' state." >&2
+            echo "  Inspect with: journalctl --user -u ansible -e" >&2
+            case "${cfg.onFailure}" in
+              fail-activation) exit 1 ;;
+              warn)            echo "  (services.ansible.onFailure = warn — continuing)" >&2 ;;
+              ignore)          : ;;
+            esac
+          fi
+        '';
+      };
 in
 {
   options.services.ansible = {
     enable = lib.mkEnableOption "system-manager-ansible (user-context)";
     package = lib.mkPackageOption pkgs "ansible" { };
-    roles = lib.mkOption {
-      type = lib.types.attrsOf roleSubmodule;
-      default = { };
-    };
-    vars = lib.mkOption {
-      type = lib.types.attrsOf lib.types.anything;
-      default = { };
-    };
+    roles = lib.mkOption { type = lib.types.attrsOf roleSubmodule; default = { }; };
+    vars = lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = { }; };
     runOnBoot = lib.mkOption { type = lib.types.bool; default = true; };
     runOnActivation = lib.mkOption { type = lib.types.bool; default = false; };
     markerPath = lib.mkOption {
@@ -106,18 +118,20 @@ in
       };
     } cfg.extraSystemdConfig;
 
-    home.activation.ansible-check = lib.hm.dag.entryAfter [ "reloadSystemd" ] ''
-      if command -v systemctl >/dev/null 2>&1; then
-        if systemctl --user is-failed --quiet ansible.service 2>/dev/null; then
-          echo "services.ansible: user ansible.service is in the 'failed' state." >&2
-          echo "  Inspect with: journalctl --user -u ansible -e" >&2
-          case "${cfg.onFailure}" in
-            fail-activation) exit 1 ;;
-            warn)            echo "  (services.ansible.onFailure = warn — continuing)" >&2 ;;
-            ignore)          : ;;
-          esac
-        fi
-      fi
-    '';
+    systemd.user.services.ansible-check = lib.mkIf (cfg.onFailure != "ignore") {
+      Unit = {
+        Description = "system-manager-ansible: post-deploy failure check (user)";
+        After = [ "ansible.service" ];
+        Wants = [ "ansible.service" ];
+      };
+      Service = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${checkService}/bin/ansible-check";
+      };
+      Install = {
+        WantedBy = [ "default.target" ];
+      };
+    };
   };
 }

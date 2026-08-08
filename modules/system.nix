@@ -10,9 +10,6 @@ let
   cfg = config.services.ansible;
   roleDefs = libExt.discoverRoles rolesDir;
 
-  # Submodule for each role invocation.
-  # freeformType = anything so disk-role-specific fields (repos, packages, etc.)
-  # pass through without needing dynamic option-tree injection.
   roleSubmodule = lib.types.submoduleWith {
     modules = [
       (
@@ -28,12 +25,12 @@ let
             priority = lib.mkOption {
               type = lib.types.int;
               default = 100;
-              description = "Coarse ordering hint; lower runs earlier. Ties broken by name.";
+              description = "Coarse ordering hint; lower runs earlier.";
             };
             tasks = lib.mkOption {
               type = lib.types.listOf lib.types.anything;
               default = [ ];
-              description = "Inline ansible task definitions (as Nix attrsets). If non-empty and no disk role of this name exists, this becomes an inline role.";
+              description = "Inline ansible task definitions.";
             };
             handlers = lib.mkOption {
               type = lib.types.listOf lib.types.anything;
@@ -43,22 +40,22 @@ let
             after = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];
-              description = "Soft ordering deps — run after these roles if they're present.";
+              description = "Soft ordering deps.";
             };
             before = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];
-              description = "Soft ordering deps — run before these roles if present.";
+              description = "Soft ordering deps, reverse direction.";
             };
             requires = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];
-              description = "Hard deps — eval fails if listed role isn't declared. Implies 'after'.";
+              description = "Hard deps — eval fails if missing.";
             };
             checkable = lib.mkOption {
               type = lib.types.bool;
               default = false;
-              description = "Whether this role's tasks are safe under ansible-playbook --check in the nix sandbox.";
+              description = "Safe under ansible-playbook --check.";
             };
           };
         }
@@ -91,6 +88,31 @@ let
         rolesPath = composed.rolesPath;
         name = "ansible-runner";
       };
+
+  # Check helper — run after ansible.service and enforce onFailure semantics.
+  # Runs on every activation via oneshot; does NOT block activation itself
+  # (system-manager doesn't expose an activation hook that can fail switch).
+  # A crashed ansible.service will show in `systemctl status ansible` and
+  # cascade via ansible-check.service's own failed state.
+  checkService =
+    if runner == null then
+      null
+    else
+      pkgs.writeShellApplication {
+        name = "ansible-check";
+        runtimeInputs = [ pkgs.systemd pkgs.coreutils ];
+        text = ''
+          if systemctl is-failed --quiet ansible.service; then
+            echo "services.ansible: ansible.service is in the 'failed' state." >&2
+            echo "  Inspect with: journalctl -u ansible -e" >&2
+            case "${cfg.onFailure}" in
+              fail-activation) exit 1 ;;
+              warn)            echo "  (services.ansible.onFailure = warn — continuing)" >&2 ;;
+              ignore)          : ;;
+            esac
+          fi
+        '';
+      };
 in
 {
   options.services.ansible = {
@@ -103,9 +125,9 @@ in
       default = { };
       description = ''
         Roles to compose into the ansible playbook. Each attribute name may:
-        - match a disk role directory under roles/ (invocation), or
-        - be freeform with non-empty .tasks (inline role authored in Nix), or
-        - both (hybrid: disk role plus inline extras).
+        - match a disk role directory under roles/,
+        - be freeform with non-empty .tasks (inline role),
+        - or both (hybrid).
       '';
     };
 
@@ -124,31 +146,38 @@ in
     runOnActivation = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Run the unit synchronously during activation.";
+      description = "Reserved for a future release — currently a no-op on system-manager.";
     };
 
     markerPath = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/system-manager-ansible/ansible.done";
-      description = "systemd ConditionPathExists=! marker. When present, unit skips.";
+      description = "systemd ConditionPathExists=! marker.";
     };
 
     disableMarker = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "If true, no marker gate — the unit runs on every trigger.";
+      description = "If true, no marker gate — unit runs on every trigger.";
     };
 
     onFailure = lib.mkOption {
       type = lib.types.enum [ "fail-activation" "warn" "ignore" ];
       default = "fail-activation";
-      description = "Post-deploy hook behaviour when ansible.service is in the failed state.";
+      description = ''
+        Behaviour of the ancillary ansible-check.service when ansible.service is
+        in the 'failed' state. Note: system-manager doesn't expose a way to fail
+        the `switch` command from an activation script, so 'fail-activation'
+        currently means "ansible-check.service exits non-zero" — the failure is
+        visible via `systemctl status ansible-check` but does NOT propagate to
+        the deployer's shell.
+      '';
     };
 
     extraSystemdConfig = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
       default = { };
-      description = "Merged verbatim into the generated systemd.services.ansible attrset.";
+      description = "Merged verbatim into systemd.services.ansible.";
     };
   };
 
@@ -169,19 +198,17 @@ in
       };
     } cfg.extraSystemdConfig;
 
-    system.activationScripts.ansible-check = lib.stringAfter [ "users" ] ''
-      # Only meaningful after the unit has actually been (re)generated.
-      if command -v systemctl >/dev/null 2>&1; then
-        if systemctl is-failed --quiet ansible.service 2>/dev/null; then
-          echo "services.ansible: ansible.service is in the 'failed' state." >&2
-          echo "  Inspect with: journalctl -u ansible -e" >&2
-          case "${cfg.onFailure}" in
-            fail-activation) exit 1 ;;
-            warn)            echo "  (services.ansible.onFailure = warn — continuing)" >&2 ;;
-            ignore)          : ;;
-          esac
-        fi
-      fi
-    '';
+    # Post-deploy check unit — runs after ansible.service, mirrors its failure.
+    systemd.services.ansible-check = lib.mkIf (cfg.onFailure != "ignore") {
+      description = "system-manager-ansible: post-deploy failure check";
+      after = [ "ansible.service" ];
+      wants = [ "ansible.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${checkService}/bin/ansible-check";
+      };
+    };
   };
 }
