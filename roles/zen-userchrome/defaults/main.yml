@@ -1,6 +1,0 @@
----
-# zenDir has no default — callers must supply it, since it depends on the
-# user's HOME and the flatpak app id (both known at Nix eval time by the
-# consumer). See meta/nix-options.nix.
-profileArchives: []
-programArchives: []
