@@ -7,7 +7,7 @@ Add users to supplementary groups (append-only, idempotent). User and groups mus
 ## Example
 
 ```nix
-services.ansible.roles.user-in-group.memberships = [
+ansnix.roles.user-in-group.memberships = [
   { user = "juliendauliac"; groups = [ "docker" ]; }
 ];
 ```

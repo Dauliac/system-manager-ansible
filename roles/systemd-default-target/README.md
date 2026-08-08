@@ -11,5 +11,5 @@ Set the default systemd target by symlinking `/lib/systemd/system/<target>.targe
 ## Example
 
 ```nix
-services.ansible.roles.systemd-default-target.target = "multi-user";
+ansnix.roles.systemd-default-target.target = "multi-user";
 ```

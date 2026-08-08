@@ -1,5 +1,5 @@
 {
-  description = "Nix-native ansible bootstrap library — declare services.ansible = { … }; get one systemd unit that runs a composed playbook against localhost.";
+  description = "Nix-native ansible bootstrap library — declare ansnix = { … }; get one systemd unit that runs a composed playbook against localhost.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";

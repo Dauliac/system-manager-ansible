@@ -126,7 +126,7 @@ let
         remaining = lib.filter (n: !(final.done.${n} or false)) allNames;
       in
       throw ''
-        services.ansible: dependency cycle detected among roles: ${lib.concatStringsSep ", " remaining}
+        ansnix: dependency cycle detected among roles: ${lib.concatStringsSep ", " remaining}
         Inspect the .after / .before / .requires edges of those roles to break the cycle.
       ''
     else
@@ -156,7 +156,7 @@ let
           req = enabled.${n}.requires or [ ];
           missing = lib.filter (r: !(builtins.elem r allNames)) req;
         in
-        if missing == [ ] then null else throw "services.ansible.roles.${n}.requires references role(s) not declared or disabled: ${lib.concatStringsSep ", " missing}"
+        if missing == [ ] then null else throw "ansnix.roles.${n}.requires references role(s) not declared or disabled: ${lib.concatStringsSep ", " missing}"
       ) null allNames;
 
       # Assert each enabled role has something to run
@@ -167,7 +167,7 @@ let
           hasDisk = roleDefs ? ${n};
           hasInline = (r.tasks or [ ]) != [ ];
         in
-        if hasDisk || hasInline then null else throw "services.ansible.roles.${n}: neither a disk role at roles/${n}/ nor inline tasks — nothing to run."
+        if hasDisk || hasInline then null else throw "ansnix.roles.${n}: neither a disk role at roles/${n}/ nor inline tasks — nothing to run."
       ) null allNames;
 
       # Build edges

@@ -17,7 +17,7 @@ Declaratively manage `/etc/apt/keyrings/*.asc` + `/etc/apt/sources.list.d/*.list
 ## Example
 
 ```nix
-services.ansible.roles.apt-repo.repos = [{
+ansnix.roles.apt-repo.repos = [{
   name   = "danklinux";
   url    = "https://download.opensuse.org/repositories/home:AvengeMedia:danklinux/Debian_13";
   keyUrl = "https://download.opensuse.org/repositories/home:AvengeMedia:danklinux/Debian_13/Release.key";

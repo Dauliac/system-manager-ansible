@@ -12,7 +12,7 @@ Install Debian packages via `ansible.builtin.apt`. One batched call = one apt lo
 ## Example
 
 ```nix
-services.ansible.roles.apt-packages = {
+ansnix.roles.apt-packages = {
   packages = [ "niri" "network-manager" "libpam-gnome-keyring" ];
   after    = [ "apt-repo" ];  # if a repo defines any of these packages
 };
