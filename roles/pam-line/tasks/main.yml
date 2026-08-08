@@ -1,0 +1,10 @@
+---
+- name: pam-line | ensure PAM lines are present
+  ansible.builtin.lineinfile:
+    path: "{{ item.file }}"
+    line: "{{ item.line }}"
+    state: present
+    create: false
+  loop: "{{ lines }}"
+  loop_control:
+    label: "{{ item.file }}"

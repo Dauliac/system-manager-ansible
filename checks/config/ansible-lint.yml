@@ -1,0 +1,19 @@
+---
+# ansible-lint config for system-manager-ansible role library.
+# See https://ansible-lint.readthedocs.io/configuring/
+profile: null
+
+exclude_paths:
+  - .git/
+  - .cache/
+  - openspec/
+
+skip_list:
+  # role-name rule flags kebab-case with hyphens; we deliberately use kebab-case.
+  - role-name
+  # yaml[document-start] handled by yamllint config; some minimal role files
+  # don't need "---" header.
+  - yaml[document-start]
+
+warn_list:
+  - experimental

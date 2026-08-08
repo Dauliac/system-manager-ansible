@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: user-in-group
+  author: Dauliac
+  description: Idempotently add users to supplementary groups.
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions: [any]
+dependencies: []

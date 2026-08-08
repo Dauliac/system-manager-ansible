@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: apt-packages
+  author: Dauliac
+  description: Install a list of Debian packages via apt.
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions: [any]
+dependencies: []

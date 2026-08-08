@@ -1,0 +1,9 @@
+---
+- name: user-in-group | append user to groups
+  ansible.builtin.user:
+    name: "{{ item.user }}"
+    groups: "{{ item.groups | join(',') }}"
+    append: true
+  loop: "{{ memberships }}"
+  loop_control:
+    label: "{{ item.user }} -> {{ item.groups | join(',') }}"

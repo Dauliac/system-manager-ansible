@@ -1,0 +1,7 @@
+---
+- name: systemd-default-target | link default.target
+  ansible.builtin.file:
+    src: "/lib/systemd/system/{{ target }}.target"
+    dest: /etc/systemd/system/default.target
+    state: link
+    force: true

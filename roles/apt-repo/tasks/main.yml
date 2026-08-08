@@ -1,0 +1,26 @@
+---
+- name: apt-repo | ensure keyring dir exists
+  ansible.builtin.file:
+    path: "{{ keyringDir }}"
+    state: directory
+    mode: '0755'
+
+- name: apt-repo | fetch signing keys
+  ansible.builtin.get_url:
+    url: "{{ item.keyUrl }}"
+    dest: "{{ keyringDir }}/{{ item.name }}.asc"
+    mode: '0644'
+    force: false
+  loop: "{{ repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: apt-repo | add sources.list.d entries
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by={{ keyringDir }}/{{ item.name }}.asc] {{ item.url }}/ {{ item.suite | default('/') }} {{ item.components | default([]) | join(' ') }}"
+    filename: "{{ item.name }}"
+    state: present
+    update_cache: true
+  loop: "{{ repos }}"
+  loop_control:
+    label: "{{ item.name }}"

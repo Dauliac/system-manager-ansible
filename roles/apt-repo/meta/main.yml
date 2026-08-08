@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: apt-repo
+  author: Dauliac
+  description: Declaratively manage /etc/apt/keyrings + sources.list.d entries.
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions: [any]
+dependencies: []

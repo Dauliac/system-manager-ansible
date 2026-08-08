@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: systemd-default-target
+  author: Dauliac
+  description: Set the default systemd target (multi-user / graphical / etc.).
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions: [any]
+dependencies: []
