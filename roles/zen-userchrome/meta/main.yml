@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: zen-userchrome
+  author: Dauliac
+  description: |
+    Idempotently extract userchrome/bootloader archive bundles (Sine, Fx
+    Autoconfig, etc.) into a Zen browser flatpak profile.
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions: [any]
+    - name: Ubuntu
+      versions: [any]
+dependencies: []

@@ -189,7 +189,10 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
         ExecStart = "${runner}/bin/ansnix-runner";
-        ExecStartPost = "${pkgs.coreutils}/bin/mkdir -p ${dirOf cfg.markerPath} && ${pkgs.coreutils}/bin/touch ${cfg.markerPath}";
+        ExecStartPost = [
+          "${pkgs.coreutils}/bin/mkdir -p ${dirOf cfg.markerPath}"
+          "${pkgs.coreutils}/bin/touch ${cfg.markerPath}"
+        ];
       };
     } cfg.extraSystemdConfig;
 
