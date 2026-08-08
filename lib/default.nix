@@ -247,6 +247,7 @@ let
         ++ (lib.optional r.hasInline {
           name = "${r.n} (inline${lib.optionalString r.hasDisk " extras"})";
           "ansible.builtin.import_role" = { name = r.inlineName; };
+          vars = r.varsAttrs;
         });
 
       allTasks = lib.concatMap mkTasksForRole resolved;
