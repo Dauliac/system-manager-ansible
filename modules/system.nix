@@ -148,7 +148,14 @@ in
     markerPath = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/ansnix/done";
-      description = "systemd ConditionPathExists=! marker.";
+      description = ''
+        Path of the convergence marker file. After a successful run,
+        ansnix.service writes the current runner's /nix/store path into this
+        file. On next trigger, systemd's ExecCondition compares the stored
+        path to the current one — matching skips the run (already converged),
+        mismatching (new role, ansible bump, ansnix upgrade) re-runs the
+        playbook. Set `disableMarker = true` to bypass the gate entirely.
+      '';
     };
 
     disableMarker = lib.mkOption {
@@ -182,17 +189,24 @@ in
       wantedBy = lib.optional cfg.runOnBoot "multi-user.target";
       after = lib.optionals cfg.runOnBoot [ "network-online.target" ];
       wants = lib.optionals cfg.runOnBoot [ "network-online.target" ];
-      unitConfig = lib.optionalAttrs (!cfg.disableMarker) {
-        ConditionPathExists = "!${cfg.markerPath}";
-      };
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        # Hash-based convergence gate: skip the run when the marker file's
+        # contents exactly match the current runner's /nix/store path. Any
+        # change to composed roles, ansnix itself, or the ansible package
+        # flips the store path so the exit code becomes 0 → systemd runs
+        # ExecStart. Missing marker → cat prints nothing → mismatch → run.
+        # Marker being a directory (from earlier deploys with the buggy
+        # shell-less ExecStartPost) → cat fails → mismatch → run, then
+        # ExecStartPost's rm -rf cleans up. Set `disableMarker = true` to
+        # bypass the gate and force a run on every trigger.
         ExecStart = "${runner}/bin/ansnix-runner";
         ExecStartPost = [
-          "${pkgs.coreutils}/bin/mkdir -p ${dirOf cfg.markerPath}"
-          "${pkgs.coreutils}/bin/touch ${cfg.markerPath}"
+          "${pkgs.bash}/bin/bash -c 'rm -rf ${cfg.markerPath} && mkdir -p ${dirOf cfg.markerPath} && printf %s ${runner} > ${cfg.markerPath}'"
         ];
+      } // lib.optionalAttrs (!cfg.disableMarker) {
+        ExecCondition = "${pkgs.bash}/bin/bash -c 'test \"$(cat ${cfg.markerPath} 2>/dev/null)\" != \"${runner}\"'";
       };
     } cfg.extraSystemdConfig;
 
